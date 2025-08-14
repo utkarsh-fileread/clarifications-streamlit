@@ -1,0 +1,2 @@
+{"role": "user", "content": "can you help me write a brief", "timestamp": "2025-08-14T10:58:52.328306", "type": "user_message"}
+{"role": "assistant", "content": "What is the topic or subject of the brief you want to write?\nWho is the intended audience for this brief?\nWhat key points or information should be included in the brief?\nDo you have any preferred length or format for the brief?", "timestamp": "2025-08-14T10:59:26.518452", "type": "tool_message"}
