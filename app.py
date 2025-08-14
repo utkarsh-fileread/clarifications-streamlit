@@ -27,6 +27,19 @@ class PromptMode(StrEnum):
     CONCISE = auto()
     DETAILED = auto()
 
+class ModelName(StrEnum):
+    GPT_4_1 = "gpt-4.1"
+    GPT_4_1_MINI = "gpt-4.1-mini"
+    GPT_5 = "gpt-5"
+    GPT_5_MINI = "gpt-5-mini"
+    GPT_4O = "gpt-4o"
+    GPT_4O_MINI = "gpt-4o-mini"
+    CHATGPT_4O = "chatgpt-4o"
+    O4_MINI = "o4-mini"
+    O3 = "o3"
+
+MODEL_NAME_DICT = {member.value: idx for idx, member in enumerate(ModelName)}
+
 # Configure the page
 st.set_page_config(
     page_title="Clarification Agent",
@@ -109,7 +122,7 @@ class ChatManager:
     
     @property
     def prompt_mode(self) -> PromptMode:
-        toggle_mode = st.session_state.chat_manager.get_chat_toggle(st.session_state.current_chat_id)
+        toggle_mode = self.get_chat_toggle(st.session_state.current_chat_id)
         return PromptMode.CONCISE if toggle_mode else PromptMode.DETAILED
 
     def add_message(self, chat_id: str, message: Dict):
@@ -171,6 +184,45 @@ class ChatManager:
         with open(self.index_file, 'w') as f:
             json.dump(chat_index, f, indent=2)
 
+    def update_question_model(self, chat_id: str, model: str):
+        """Update chat question model in index"""
+        chat_index = self.get_chat_list()
+        for chat in chat_index:
+            if chat["id"] == chat_id:
+                chat["question_model"] = model
+                break
+        
+        with open(self.index_file, 'w') as f:
+            json.dump(chat_index, f, indent=2)
+
+    @property
+    def question_model(self) -> str:
+        chat_index = self.get_chat_list()
+        for chat in chat_index:
+            if chat["id"] == st.session_state.current_chat_id:
+                return chat.get("question_model", "gpt-4.1")
+        return "gpt-4.1"
+
+    def update_decision_model(self, chat_id: str, model: str):
+        """Update chat decision model in index"""
+        chat_index = self.get_chat_list()
+        for chat in chat_index:
+            if chat["id"] == chat_id:
+                chat["decision_model"] = model
+                break
+
+        with open(self.index_file, 'w') as f:
+            json.dump(chat_index, f, indent=2)
+    
+    @property
+    def decision_model(self):
+        chat_index = self.get_chat_list()
+        for chat in chat_index:
+            if chat["id"] == st.session_state.current_chat_id:
+                return chat.get("decision_model", "gpt-4.1-mini")
+        return "gpt-4.1-mini"
+
+
 class ChatAssistant:
     def __init__(self):
         pass
@@ -208,7 +260,7 @@ class ChatAssistant:
         unfinished_thread.reverse()  # Reverse to maintain original order
         return unfinished_thread if unfinished_thread else []
 
-    def needs_clarification(self, context: List[Dict], promptMode: PromptMode) -> Union[bool, str]:
+    def needs_clarification(self, context: List[Dict], promptMode: PromptMode, decision_model: str, question_model:str) -> Union[bool, str]:
         """
         Determine if the user input needs clarification
         Returns (needs_clarification, clarification_question)
@@ -229,7 +281,7 @@ class ChatAssistant:
         clarifier_system_prompt = "canvas/clarifier/clarifierSystemPrompt" if promptMode == PromptMode.DETAILED else "canvas/clarifier/ClarifierSystemPromptConcise" 
 
         response = openai_client.responses.parse(
-            model="gpt-4.1-mini",
+            model=decision_model,
             input=[
                 {'role': 'system', 'content': langfuse_client.get_prompt(need_more_clarifications_prompt).get_langchain_prompt()},
                 {'role': 'user', 'content': f"Here are the follow-ups and answers: {"\n\n".join(past_questions)}"}
@@ -245,7 +297,7 @@ class ChatAssistant:
             return False
         
         response = openai_client.responses.parse(
-            model="gpt-4.1",
+            model=question_model,
             input=[
                 {"role": "system", "content":langfuse_client.get_prompt(clarifier_system_prompt).get_langchain_prompt()
                 },
@@ -267,14 +319,14 @@ class ChatAssistant:
         
         return questions.strip()
 
-    def process_unfinished_conversation(self, unfinished_thread: List[Dict], prompt_mode: PromptMode) -> Union[bool, str]:
+    def process_unfinished_conversation(self, unfinished_thread: List[Dict], prompt_mode: PromptMode, decision_model: str, question_model: str) -> Union[bool, str]:
         """
         Process the unfinished conversation thread
         This is where you'd implement your specific processing logic
         """
         # Example processing - replace with your actual logic
 
-        return self.needs_clarification(unfinished_thread, prompt_mode)
+        return self.needs_clarification(unfinished_thread, prompt_mode, decision_model, question_model)
 
 # Initialize session state
 if "chat_manager" not in st.session_state:
@@ -324,7 +376,7 @@ with st.sidebar:
 
                 if len(unfinished_thread) > 0:
                     # Process the unfinished conversation automatically
-                    thread_response = st.session_state.assistant.process_unfinished_conversation(unfinished_thread, st.session_state.chat_manager.prompt_mode)
+                    thread_response = st.session_state.assistant.process_unfinished_conversation(unfinished_thread, st.session_state.chat_manager.prompt_mode, st.session_state.chat_manager.decision_model, st.session_state.chat_manager.question_model)
                     # Processing unfinished conversation
                     if thread_response is False:
                         assistant_message = {
@@ -382,18 +434,45 @@ else:
         current_toggle = st.session_state.chat_manager.get_chat_toggle(st.session_state.current_chat_id)
         
         st.divider()
-        new_toggle = st.toggle(
-            "Concise Questions",
-            value=bool(current_toggle),
-            key=f"current_toggle_{st.session_state.current_chat_id}",
-            help="Enable the concise option if you want the model to ask as few questions as possible"
-        )
-        
-        # Update toggle state if changed
-        new_toggle_value = 1 if new_toggle else 0
-        if new_toggle_value != current_toggle:
-            st.session_state.chat_manager.update_chat_toggle(st.session_state.current_chat_id, new_toggle_value)
-    
+# Create three columns for horizontal layout
+        col1, col2, col3 = st.columns(3)
+
+        # Place toggle in first column
+        with col1:
+            new_toggle = st.toggle(
+                "Concise Questions",
+                value=bool(current_toggle),
+                key=f"current_toggle_{st.session_state.current_chat_id}",
+                help="Enable the concise option if you want the model to ask as few questions as possible"
+            )
+            
+            # Update toggle state if changed
+            new_toggle_value = 1 if new_toggle else 0
+            if new_toggle_value != current_toggle:
+                st.session_state.chat_manager.update_chat_toggle(st.session_state.current_chat_id, new_toggle_value)
+
+        # Place first selectbox in second column
+        with col2:
+            option1 = st.selectbox(
+                "Model that thinks about Questions",
+                [member.value for member in ModelName],
+                index=MODEL_NAME_DICT.get(st.session_state.chat_manager.question_model, 0),
+                placeholder="Select Question Generator.",
+                key="thinker-model-picker",
+            )
+            st.session_state.chat_manager.update_question_model(st.session_state.current_chat_id, option1)
+
+        # Place second selectbox in third column
+        with col3:
+            option2 = st.selectbox(
+                "Model that thinks about if there is a need to ask more questions",
+                [member.value for member in ModelName],
+                index=MODEL_NAME_DICT.get(st.session_state.chat_manager.decision_model, 1),
+                placeholder="Select Decision Maker.",
+                key="decider-model-picker",
+            )
+            st.session_state.chat_manager.update_decision_model(st.session_state.current_chat_id, option2)
+
     # Chat input
     if prompt := st.chat_input("Type your message here..."):
         # Add user message to chat
@@ -406,10 +485,8 @@ else:
             st.write(prompt)
 
         relevant_chat_history = st.session_state.assistant.find_unfinished_conversation(st.session_state.messages)
-        
 
-
-        needs_clarification = st.session_state.assistant.needs_clarification(relevant_chat_history, st.session_state.chat_manager.prompt_mode)
+        needs_clarification = st.session_state.assistant.needs_clarification(relevant_chat_history, st.session_state.chat_manager.prompt_mode, st.session_state.chat_manager.decision_model, st.session_state.chat_manager.question_model)
         assistant_response = {'role':'assistant'}
         
         if needs_clarification is False:
