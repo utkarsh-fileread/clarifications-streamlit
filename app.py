@@ -12,7 +12,6 @@ from typing import List, Dict, Optional
 from enum import StrEnum, auto
 from typing import Union
 
-import sys
 from clarifications_structure import NeedMoreClarifications, FollowUps
 
 openai_client = OpenAI()
