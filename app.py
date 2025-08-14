@@ -36,7 +36,7 @@ st.set_page_config(
 )
 
 class ChatManager:
-    def __init__(self, chats_dir: str = "streamlit/chat_storage"):
+    def __init__(self, chats_dir: str = "chat_storage"):
         self.chats_dir = Path(chats_dir)
         self.chats_dir.mkdir(exist_ok=True)
         self.index_file = self.chats_dir / "chat_index.json"
