@@ -452,9 +452,10 @@ else:
 
         # Place first selectbox in second column
         with col2:
+            model_names = [member.value for member in ModelName]
             option1 = st.selectbox(
                 "Model that thinks about Questions",
-                [member.value for member in ModelName],
+                model_names,
                 index=MODEL_NAME_DICT.get(st.session_state.chat_manager.question_model, 0),
                 placeholder="Select Question Generator.",
                 key="thinker-model-picker",
@@ -463,9 +464,10 @@ else:
 
         # Place second selectbox in third column
         with col3:
+            model_names = [member.value for member in ModelName]
             option2 = st.selectbox(
                 "Model that thinks about if there is a need to ask more questions",
-                [member.value for member in ModelName],
+                model_names,
                 index=MODEL_NAME_DICT.get(st.session_state.chat_manager.decision_model, 1),
                 placeholder="Select Decision Maker.",
                 key="decider-model-picker",
